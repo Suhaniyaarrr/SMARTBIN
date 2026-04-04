@@ -1,0 +1,9 @@
+(Install Library)
+🔹 Method 1: Install via Library Manager (Easiest)
+Open Arduino IDE
+Go to Sketch → Include Library → Manage Libraries
+
+In search bar type: ESP32Servo
+
+Install:
+👉 ESP32Servo by Kevin Harrington
