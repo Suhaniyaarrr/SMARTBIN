@@ -228,6 +228,18 @@ void loop() {
 **Suhani Gupta**
 B.Tech CSE (AI & ML)
 
+**Gaurav Chauhan**
+B.Tech CSE (AI & ML)
+
+**Rudransh Gupta**
+B.Tech CSE (AI & ML)
+
+**Divyam**
+B.Tech CSE (AI & ML)
+
+**Saksham Yadav**
+B.Tech CSE (AI & ML)
+
 ---
 
 ## 📜 License
