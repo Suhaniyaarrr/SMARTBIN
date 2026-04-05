@@ -226,19 +226,19 @@ void loop() {
 ## 👨‍💻 Author
 
 **Suhani Gupta**
-B.Tech CSE (AI & ML)
+B.Tech CSE (AI & ML) - 2401730139
 
 **Gaurav Chauhan**
-B.Tech CSE (AI & ML)
+B.Tech CSE (AI & ML) - 2401730146
 
 **Rudransh Gupta**
-B.Tech CSE (AI & ML)
+B.Tech CSE (AI & ML) - 2401730199
 
-**Divyam**
-B.Tech CSE (AI & ML)
+**Divayam Yadav**
+B.Tech CSE (AI & ML) - 2401730220
 
-**Saksham Yadav**
-B.Tech CSE (AI & ML)
+**Saksham**
+B.Tech CSE (AI & ML) - 2401730275
 
 ---
 
