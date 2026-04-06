@@ -25,7 +25,7 @@ interface ChartsProps {
   isLoading?: boolean;
 }
 
-// Color palette for charts - using computed hex values
+// Color palette
 const chartColors = {
   bin1: "#10b981",
   bin2: "#f59e0b",
@@ -43,9 +43,10 @@ export function Charts({ bins, isLoading }: ChartsProps) {
     async function fetchHistory() {
       try {
         const data = await api.getAllBinsHistory();
-        setHistoryData(data);
+        setHistoryData(data || []);
       } catch (error) {
         console.error("Failed to fetch history:", error);
+        setHistoryData([]);
       } finally {
         setHistoryLoading(false);
       }
@@ -53,31 +54,49 @@ export function Charts({ bins, isLoading }: ChartsProps) {
     fetchHistory();
   }, []);
 
-  // Transform history data for line chart (fill level over time)
-  const lineChartData = historyData[0]?.data.map((_, index) => {
-    const point: Record<string, string | number> = {
-      time: new Date(historyData[0].data[index].timestamp).toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    };
-    historyData.forEach((history) => {
-      point[history.binId] = Math.round(history.data[index]?.fillLevel || 0);
-    });
-    return point;
-  }) || [];
+  // 🔥 SAFE LINE CHART DATA (FIXED)
+  const lineChartData =
+    historyData?.length > 0 && historyData[0]?.data
+      ? historyData[0].data.map((_, index) => {
+          const point: Record<string, string | number> = {
+            time: new Date(
+              historyData[0].data[index]?.timestamp
+            ).toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          };
 
-  // Transform bin data for bar chart (current fill levels comparison)
-  const barChartData = bins.map((bin, index) => ({
-    name: bin.id,
-    fillLevel: bin.fillLevel,
-    fill: Object.values(chartColors)[index % Object.values(chartColors).length],
-  }));
+          historyData.forEach((history) => {
+            point[history.binId] = Math.round(
+              history.data?.[index]?.fillLevel || 0
+            );
+          });
+
+          return point;
+        })
+      : [];
+
+  // Bar chart data (safe)
+  const barChartData =
+    bins?.length > 0
+      ? bins.map((bin, index) => ({
+          name: bin.id,
+          fillLevel: bin.fillLevel,
+          fill:
+            Object.values(chartColors)[
+              index % Object.values(chartColors).length
+            ],
+        }))
+      : [];
 
   const lineChartConfig = bins.reduce((acc, bin, index) => {
     acc[bin.id] = {
       label: bin.id,
-      color: Object.values(chartColors)[index % Object.values(chartColors).length],
+      color:
+        Object.values(chartColors)[
+          index % Object.values(chartColors).length
+        ],
     };
     return acc;
   }, {} as Record<string, { label: string; color: string }>);
@@ -89,56 +108,66 @@ export function Charts({ bins, isLoading }: ChartsProps) {
     },
   };
 
+  // 🔥 LOADING STATE
   if (isLoading || historyLoading) {
     return (
       <div className="grid gap-6 lg:grid-cols-2">
         {[1, 2].map((i) => (
-          <div key={i} className="h-[400px] animate-pulse rounded-2xl border border-border bg-card" />
+          <div
+            key={i}
+            className="h-[400px] animate-pulse rounded-2xl border border-border bg-card"
+          />
         ))}
+      </div>
+    );
+  }
+
+  // 🔥 EMPTY STATE (IMPORTANT FIX)
+  if (!lineChartData.length) {
+    return (
+      <div className="p-6 text-center text-muted-foreground">
+        No chart data available yet...
       </div>
     );
   }
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
-      {/* Line Chart - Fill Level Over Time */}
+      {/* Line Chart */}
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
         <div className="flex items-center gap-2 border-b border-border px-5 py-4">
           <TrendingUp className="h-5 w-5 text-primary" />
           <div>
-            <h3 className="font-semibold text-card-foreground">Fill Level Trends</h3>
-            <p className="text-xs text-muted-foreground">Last 24 hours</p>
+            <h3 className="font-semibold">Fill Level Trends</h3>
+            <p className="text-xs text-muted-foreground">
+              Last 24 hours
+            </p>
           </div>
         </div>
+
         <div className="p-5">
           <ChartContainer config={lineChartConfig} className="h-[300px] w-full">
-            <LineChart data={lineChartData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
-              <XAxis
-                dataKey="time"
-                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                tickLine={false}
-                axisLine={{ stroke: "var(--border)" }}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                tickLine={false}
-                axisLine={{ stroke: "var(--border)" }}
-                domain={[0, 100]}
-                tickFormatter={(value) => `${value}%`}
-              />
+            <LineChart data={lineChartData}>
+              <CartesianGrid strokeDasharray="3 3" opacity={0.5} />
+
+              <XAxis dataKey="time" />
+              <YAxis domain={[0, 100]} />
+
               <ChartTooltip content={<ChartTooltipContent />} />
               <ChartLegend content={<ChartLegendContent />} />
+
               {bins.slice(0, 4).map((bin, index) => (
                 <Line
                   key={bin.id}
                   type="monotone"
                   dataKey={bin.id}
-                  stroke={Object.values(chartColors)[index % Object.values(chartColors).length]}
+                  stroke={
+                    Object.values(chartColors)[
+                      index % Object.values(chartColors).length
+                    ]
+                  }
                   strokeWidth={2}
                   dot={false}
-                  activeDot={{ r: 4, strokeWidth: 0 }}
                 />
               ))}
             </LineChart>
@@ -146,41 +175,26 @@ export function Charts({ bins, isLoading }: ChartsProps) {
         </div>
       </div>
 
-      {/* Bar Chart - Current Fill Level Comparison */}
+      {/* Bar Chart */}
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
-        <div className="flex items-center gap-2 border-b border-border px-5 py-4">
+        <div className="flex items-center gap-2 border-b px-5 py-4">
           <BarChart3 className="h-5 w-5 text-primary" />
           <div>
-            <h3 className="font-semibold text-card-foreground">Current Fill Levels</h3>
-            <p className="text-xs text-muted-foreground">Comparison across all bins</p>
+            <h3 className="font-semibold">Current Fill Levels</h3>
           </div>
         </div>
+
         <div className="p-5">
           <ChartContainer config={barChartConfig} className="h-[300px] w-full">
-            <BarChart data={barChartData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} vertical={false} />
-              <XAxis
-                dataKey="name"
-                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                tickLine={false}
-                axisLine={{ stroke: "var(--border)" }}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                tickLine={false}
-                axisLine={{ stroke: "var(--border)" }}
-                domain={[0, 100]}
-                tickFormatter={(value) => `${value}%`}
-              />
-              <ChartTooltip
-                content={<ChartTooltipContent />}
-                cursor={{ fill: "var(--muted)", opacity: 0.2 }}
-              />
-              <Bar
-                dataKey="fillLevel"
-                radius={[6, 6, 0, 0]}
-                maxBarSize={50}
-              />
+            <BarChart data={barChartData}>
+              <CartesianGrid strokeDasharray="3 3" />
+
+              <XAxis dataKey="name" />
+              <YAxis domain={[0, 100]} />
+
+              <ChartTooltip content={<ChartTooltipContent />} />
+
+              <Bar dataKey="fillLevel" radius={[6, 6, 0, 0]} />
             </BarChart>
           </ChartContainer>
         </div>

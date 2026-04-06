@@ -26,15 +26,14 @@ interface ThemeProviderProps {
 }
 
 export function ThemeProvider({ children, defaultTheme = "dark" }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(defaultTheme);
-  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("dark");
-
-  useEffect(() => {
-    const stored = localStorage.getItem("theme") as Theme | null;
-    if (stored) {
-      setTheme(stored);
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window === "undefined") {
+      return defaultTheme;
     }
-  }, []);
+    const stored = localStorage.getItem("theme") as Theme | null;
+    return stored ?? defaultTheme;
+  });
+  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("dark");
 
   useEffect(() => {
     const root = document.documentElement;
