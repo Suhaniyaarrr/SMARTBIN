@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -17,6 +16,8 @@ interface SidebarProps {
   activeView: string;
   onViewChange: (view: string) => void;
   isLoading?: boolean;
+  collapsed: boolean;
+  onCollapse: (collapsed: boolean) => void;
 }
 
 const navItems = [
@@ -26,8 +27,7 @@ const navItems = [
   { id: "alerts", label: "Alerts", icon: Bell },
 ];
 
-export function Sidebar({ bins, activeView, onViewChange, isLoading }: SidebarProps) {
-  const [collapsed, setCollapsed] = useState(false);
+export function Sidebar({ bins, activeView, onViewChange, isLoading, collapsed, onCollapse }: SidebarProps) {
 
   return (
     <aside
@@ -105,7 +105,7 @@ export function Sidebar({ bins, activeView, onViewChange, isLoading }: SidebarPr
       {/* Collapse Button */}
       <div className="border-t border-sidebar-border p-3">
         <button
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={() => onCollapse(!collapsed)}
           className="flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
         >
           {collapsed ? (

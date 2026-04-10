@@ -28,8 +28,8 @@ const sendSMSAlert = async (rawBinData) => {
     
     // Use dynamic coordinates if ESP32 provided them correctly, else use the static URL
     let locationUrl = staticMapUrl;
-    if (rawBinData.lat && rawBinData.lng) {
-        locationUrl = `https://www.google.com/maps?q=${rawBinData.lat},${rawBinData.lng}`;
+    if (rawBinData.location && rawBinData.location.lat && rawBinData.location.lng) {
+        locationUrl = `https://www.google.com/maps?q=${rawBinData.location.lat},${rawBinData.location.lng}`;
     }
 
     // Format the final SMS text exactly as requested

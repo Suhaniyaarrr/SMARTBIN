@@ -18,6 +18,7 @@ export function Dashboard() {
   const [isConnected, setIsConnected] = useState(true);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -31,9 +32,11 @@ export function Dashboard() {
       setAlerts(alertsData);
       setIsConnected(connectionStatus.connected);
       setLastSync(connectionStatus.lastSync);
+      setErrorMessage(null);
     } catch (error) {
       console.error("Failed to fetch data:", error);
       setIsConnected(false);
+      setErrorMessage("Unable to reach backend. Check backend server, API URL, and CORS settings.");
     } finally {
       setIsLoading(false);
     }
@@ -41,8 +44,8 @@ export function Dashboard() {
 
   useEffect(() => {
     fetchData();
-    // Refresh data every 30 seconds
-    const interval = setInterval(fetchData, 30000);
+    // Refresh data every 3 seconds so console-driven changes show up quickly.
+    const interval = setInterval(fetchData, 3000);
     return () => clearInterval(interval);
   }, [fetchData]);
 
@@ -109,6 +112,12 @@ export function Dashboard() {
       default:
         return (
           <div className="space-y-6">
+            {errorMessage && (
+              <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-300">
+                {errorMessage}
+              </div>
+            )}
+
             {/* Summary Cards */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {summaryCards.map((card) => {
@@ -173,6 +182,8 @@ export function Dashboard() {
         activeView={activeView}
         onViewChange={setActiveView}
         isLoading={isLoading}
+        collapsed={sidebarCollapsed}
+        onCollapse={setSidebarCollapsed}
       />
       <Navbar
         isConnected={isConnected}

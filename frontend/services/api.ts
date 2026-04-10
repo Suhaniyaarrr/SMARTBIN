@@ -29,16 +29,73 @@ export interface FillLevelHistory {
 interface BackendBinResponse {
   id: string;
   fillLevel: number;
-  lidStatus: "open" | "closed";
+  status: "Low" | "Medium" | "Full" | "low" | "medium" | "high";
   lastUpdated: string;
   location: BinLocation;
 }
 
-// 🔥 FIXED BASE URL (IMPORTANT)
-const BASE_URL =
-  typeof window === "undefined"
-    ? "http://127.0.0.1:5000"
-    : "http://localhost:5000";
+interface BackendStatusResponse {
+  status: "ok" | "error";
+  timestamp: string;
+  totalBins: number;
+  criticalBins: number;
+  latestUpdate: string | null;
+}
+
+const DEFAULT_API_BASE = "http://localhost:5000";
+
+const isLocalHostName = (hostname: string): boolean =>
+  hostname === "localhost" || hostname === "127.0.0.1";
+
+const mapLocalhostToCurrentHost = (url: string): string => {
+  if (typeof window === "undefined") {
+    return url;
+  }
+
+  try {
+    const parsed = new URL(url);
+    if (isLocalHostName(parsed.hostname)) {
+      parsed.hostname = window.location.hostname;
+      return parsed.toString().replace(/\/$/, "");
+    }
+  } catch {
+    return url;
+  }
+
+  return url;
+};
+
+const resolveApiBaseUrl = (): string => {
+  const envUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  if (envUrl) {
+    return mapLocalhostToCurrentHost(envUrl.replace(/\/$/, ""));
+  }
+
+  // During local development, same-origin avoids hardcoded host mismatches.
+  if (typeof window !== "undefined") {
+    return "";
+  }
+
+  return DEFAULT_API_BASE;
+};
+
+const BASE_URL = resolveApiBaseUrl();
+
+const normalizeStatus = (status: BackendBinResponse["status"]): Bin["status"] => {
+  const normalized = String(status).toLowerCase();
+
+  if (normalized === "full" || normalized === "high") return "high";
+  if (normalized === "medium") return "medium";
+  return "low";
+};
+
+const parseJson = async <T>(res: Response): Promise<T> => {
+  try {
+    return (await res.json()) as T;
+  } catch {
+    throw new Error("Invalid JSON response from backend");
+  }
+};
 
 // API Service Functions
 export const api = {
@@ -46,38 +103,28 @@ export const api = {
    * 🔥 Fetch all bins (CONNECTED TO BACKEND)
    */
   async getBins(): Promise<Bin[]> {
-    try {
-      const res = await fetch(`${BASE_URL}/api/bins`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        cache: "no-store",
-      });
+    const res = await fetch(`${BASE_URL}/api/bins`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      cache: "no-store",
+    });
 
-      if (!res.ok) {
-        throw new Error(`Failed to fetch bins: ${res.status}`);
-      }
-
-      const data = (await res.json()) as BackendBinResponse[];
-
-      return data.map((bin) => ({
-        id: bin.id,
-        fillLevel: bin.fillLevel,
-        status:
-          bin.fillLevel <= 50
-            ? "low"
-            : bin.fillLevel <= 80
-            ? "medium"
-            : "high",
-        lidStatus: bin.lidStatus,
-        lastUpdated: bin.lastUpdated,
-        location: bin.location,
-      }));
-    } catch (error) {
-      console.error("❌ Error fetching bins:", error);
-      return [];
+    if (!res.ok) {
+      throw new Error(`Failed to fetch bins: ${res.status}`);
     }
+
+    const data = await parseJson<BackendBinResponse[]>(res);
+
+    return data.map((bin) => ({
+      id: bin.id,
+      fillLevel: bin.fillLevel,
+      status: normalizeStatus(bin.status),
+      lidStatus: "closed",
+      lastUpdated: bin.lastUpdated,
+      location: bin.location,
+    }));
   },
 
   /**
@@ -92,32 +139,27 @@ export const api = {
    * 🔥 Fetch alerts (CONNECTED TO BACKEND)
    */
   async getAlerts(): Promise<Alert[]> {
-    try {
-      const res = await fetch(`${BASE_URL}/api/alerts`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        cache: "no-store",
-      });
+    const res = await fetch(`${BASE_URL}/api/alerts`, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      cache: "no-store",
+    });
 
-      if (!res.ok) {
-        throw new Error(`Failed to fetch alerts: ${res.status}`);
-      }
-
-      const data = (await res.json()) as BackendBinResponse[];
-
-      return data.map((bin, index: number) => ({
-        id: `ALERT_${index}`,
-        binId: bin.id,
-        message: `${bin.id} is ${bin.fillLevel}% full`,
-        type: bin.fillLevel >= 80 ? "critical" : "warning",
-        timestamp: bin.lastUpdated,
-      }));
-    } catch (error) {
-      console.error("❌ Error fetching alerts:", error);
-      return [];
+    if (!res.ok) {
+      throw new Error(`Failed to fetch alerts: ${res.status}`);
     }
+
+    const data = await parseJson<BackendBinResponse[]>(res);
+
+    return data.map((bin, index: number) => ({
+      id: `ALERT_${index}`,
+      binId: bin.id,
+      message: `${bin.id} is ${bin.fillLevel}% full`,
+      type: bin.fillLevel >= 80 ? "critical" : "warning",
+      timestamp: bin.lastUpdated,
+    }));
   },
 
   /**
@@ -147,7 +189,7 @@ export const api = {
    */
   async getAllBinsHistory(): Promise<FillLevelHistory[]> {
     const bins = await this.getBins();
-    return bins.map((bin) => this.getFillLevelHistory(bin.id));
+    return Promise.all(bins.map((bin) => this.getFillLevelHistory(bin.id)));
   },
 
   /**
@@ -158,10 +200,22 @@ export const api = {
     lastSync: string;
   }> {
     try {
-      const res = await fetch(`${BASE_URL}/api/bins`);
+      const res = await fetch(`${BASE_URL}/api/status`, {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        return {
+          connected: false,
+          lastSync: new Date().toISOString(),
+        };
+      }
+
+      const status = await parseJson<BackendStatusResponse>(res);
       return {
-        connected: res.ok,
-        lastSync: new Date().toISOString(),
+        connected: status.status === "ok",
+        lastSync: status.timestamp,
       };
     } catch {
       return {

@@ -1,200 +1,226 @@
-#include <ESP32Servo.h>
 #include <WiFi.h>
 #include <HTTPClient.h>
-#include <ArduinoJson.h>
 
-// WiFi Configuration
-const char* ssid = "Suhani";
-const char* password = "suhani@123";
+#if __has_include(<ESP32Servo.h>)
+#include <ESP32Servo.h>
+#else
+#error "ESP32Servo library is required. Install it from Library Manager."
+#endif
 
-// Backend API Configuration
-const char* serverAddress = "https://unliterary-unfederatively-eleni.ngrok-free.dev/api/bin-data";  // Change IP to your backend server
-const char* binId = "BIN_01";  // Unique identifier for this bin
+#if __has_include(<TinyGPSPlus.h>)
+#include <TinyGPSPlus.h>
+#define GPS_LIB_AVAILABLE 1
+#else
+#define GPS_LIB_AVAILABLE 0
+#endif
 
-// GPIO Pins
-#define TRIG_PIN 5
-#define ECHO_PIN 18
-#define SERVO_PIN 13
-#define BUZZER_PIN 12
+// ----------------------
+// Network configuration
+// ----------------------
+const char* ssid = "YOUR_WIFI_SSID";
+const char* password = "YOUR_WIFI_PASSWORD";
+const char* serverName = "http://192.168.1.100:5000/api/bin-data";
 
-// Sensor Configuration
-#define MAX_DISTANCE 50  // cm - bin height
-#define MIN_DISTANCE 5   // cm - minimum readable distance
-#define CALIBRATION_OFFSET 2  // cm - adjust if needed
+// ----------------------
+// Bin/device identifiers
+// ----------------------
+const char* BIN_ID = "BIN_01";
 
-Servo myServo;
-long duration;
-int distance;
-int fillLevel = 0;
-String lidStatus = "closed";
-unsigned long lastSendTime = 0;
-const unsigned long SEND_INTERVAL = 10000;  // Send data every 10 seconds
+// ----------------------
+// Hardware pin mapping
+// ----------------------
+const int TRIG_PIN = 5;
+const int ECHO_PIN = 18;
+const int IR_PIN = 19;
+const int SERVO_PIN = 13;
 
-void setup() {
-  Serial.begin(115200);
-  delay(1000);
-  
-  pinMode(TRIG_PIN, OUTPUT);
-  pinMode(ECHO_PIN, INPUT);
-  pinMode(BUZZER_PIN, OUTPUT);
-  
-  myServo.attach(SERVO_PIN);
-  myServo.write(0);  // lid closed
-  
-  Serial.println("\n\n=== SMARTBIN DEVICE STARTING ===");
-  Serial.println("Connecting to WiFi...");
-  
-  connectToWiFi();
+// ----------------------
+// Sensor and servo tuning
+// ----------------------
+const float BIN_DEPTH_CM = 30.0f;
+const int SERVO_CLOSED_ANGLE = 0;
+const int SERVO_OPEN_ANGLE = 90;
+const unsigned long LID_OPEN_MS = 2500;
+
+// ----------------------
+// Telemetry timings
+// ----------------------
+const unsigned long SEND_INTERVAL_MS = 10000;
+const unsigned long WIFI_RETRY_INTERVAL_MS = 5000;
+
+Servo lidServo;
+unsigned long lastSendAt = 0;
+unsigned long lastWifiRetryAt = 0;
+unsigned long lidOpenedAt = 0;
+bool lidIsOpen = false;
+
+#if GPS_LIB_AVAILABLE
+const bool USE_GPS = false;
+TinyGPSPlus gps;
+HardwareSerial GPSSerial(1);
+const int GPS_RX_PIN = 16;
+const int GPS_TX_PIN = 17;
+#endif
+
+float clampf(float value, float minValue, float maxValue) {
+  if (value < minValue) return minValue;
+  if (value > maxValue) return maxValue;
+  return value;
 }
 
-void connectToWiFi() {
-  WiFi.begin(ssid, password);
-  int attempts = 0;
-  
-  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
-    delay(500);
-    Serial.print(".");
-    attempts++;
-  }
-  
+void connectWiFiIfNeeded() {
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\n✓ WiFi Connected!");
-    Serial.print("IP Address: ");
-    Serial.println(WiFi.localIP());
-  } else {
-    Serial.println("\n✗ WiFi Connection Failed!");
+    return;
   }
+
+  unsigned long now = millis();
+  if (now - lastWifiRetryAt < WIFI_RETRY_INTERVAL_MS) {
+    return;
+  }
+
+  lastWifiRetryAt = now;
+  Serial.print("[WiFi] Connecting to ");
+  Serial.println(ssid);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
 }
 
-int getDistance() {
-  // Send ultrasonic pulse
+float readDistanceCm() {
   digitalWrite(TRIG_PIN, LOW);
-  delayMicroseconds(2);
-  
+  delayMicroseconds(3);
   digitalWrite(TRIG_PIN, HIGH);
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
-  
-  // Measure echo duration
-  duration = pulseIn(ECHO_PIN, HIGH, 30000);  // 30ms timeout
-  
-  if (duration == 0) {
-    Serial.println("[Sensor] No echo received - sensor error");
-    return -1;
+
+  long duration = pulseIn(ECHO_PIN, HIGH, 30000);
+  if (duration <= 0) {
+    return -1.0f;
   }
-  
-  // Convert duration to distance (speed of sound = 343 m/s = 0.0343 cm/µs)
-  distance = (duration * 0.0343) / 2;
-  
-  // Basic validation
-  if (distance < MIN_DISTANCE || distance > MAX_DISTANCE) {
-    Serial.println("[Sensor] Distance out of range: " + String(distance) + "cm");
-    return -1;
-  }
-  
-  return distance;
+
+  float distanceCm = (duration * 0.0343f) / 2.0f;
+  return distanceCm;
 }
 
-int calculateFillLevel(int dist) {
-  if (dist < 0) return fillLevel;  // Keep previous value on error
-  
-  // Calculate fill percentage: (empty - current) / (empty - full) * 100
-  // Assuming: empty=MAX_DISTANCE, full=MIN_DISTANCE
-  int fill = map(dist, MAX_DISTANCE, MIN_DISTANCE, 0, 100);
-  fill = constrain(fill, 0, 100);
-  
-  return fill;
+float readFillLevelPercent() {
+  float distance = readDistanceCm();
+  if (distance < 0.0f) {
+    Serial.println("[Sensor] Ultrasonic read timeout, keeping last safe value 0%");
+    return 0.0f;
+  }
+
+  float filledCm = BIN_DEPTH_CM - distance;
+  float fillPercent = (filledCm / BIN_DEPTH_CM) * 100.0f;
+  return clampf(fillPercent, 0.0f, 100.0f);
 }
 
-void sendDataToBackend(int distance, int fillPercent) {
+void updateLidByIR() {
+  int irState = digitalRead(IR_PIN);
+  bool objectDetected = (irState == LOW);
+
+  if (objectDetected && !lidIsOpen) {
+    lidServo.write(SERVO_OPEN_ANGLE);
+    lidIsOpen = true;
+    lidOpenedAt = millis();
+    Serial.println("[LID] Object detected -> opening lid");
+  }
+
+  if (lidIsOpen && (millis() - lidOpenedAt >= LID_OPEN_MS)) {
+    lidServo.write(SERVO_CLOSED_ANGLE);
+    lidIsOpen = false;
+    Serial.println("[LID] Closing lid after timeout");
+  }
+}
+
+String getLidStatus() {
+  return lidIsOpen ? "open" : "closed";
+}
+
+void sendData(float fillLevel) {
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[API] WiFi not connected, skipping API call");
+    Serial.println("[HTTP] Skipped: WiFi not connected");
     return;
   }
-  
-  HTTPClient http;
-  
-  // Create JSON payload
-  StaticJsonDocument<200> jsonDoc;
-  jsonDoc["id"] = binId;
-  jsonDoc["fillLevel"] = fillPercent;
-  jsonDoc["lidStatus"] = lidStatus;
-  jsonDoc["timestamp"] = getTimestamp();
-  
-  // Location data (Delhi coordinates as example - replace with actual GPS if available)
-  jsonDoc["lat"] = 28.6139;  // Latitude
-  jsonDoc["lng"] = 77.2090;  // Longitude
-  
-  String jsonString;
-  serializeJson(jsonDoc, jsonString);
-  
-  Serial.println("[API] Sending payload: " + jsonString);
-  
-  http.begin(serverAddress);
-  http.addHeader("Content-Type", "application/json");
-  
-  int httpCode = http.POST(jsonString);
-  
-  if (httpCode == HTTP_CODE_OK || httpCode == 200) {
-    Serial.println("[API] ✓ Data sent successfully (HTTP " + String(httpCode) + ")");
-    String response = http.getString();
-    Serial.println("[API] Response: " + response);
-  } else {
-    Serial.println("[API] ✗ Failed to send data (HTTP " + String(httpCode) + ")");
+
+  float lat = 0.0f;
+  float lng = 0.0f;
+
+#if GPS_LIB_AVAILABLE
+  if (USE_GPS) {
+    while (GPSSerial.available() > 0) {
+      gps.encode(GPSSerial.read());
+    }
+    if (gps.location.isValid()) {
+      lat = gps.location.lat();
+      lng = gps.location.lng();
+    }
   }
-  
+#endif
+
+  HTTPClient http;
+  http.begin(serverName);
+  http.setConnectTimeout(5000);
+  http.setTimeout(5000);
+  http.addHeader("Content-Type", "application/json");
+
+  String json = "{";
+  json += "\"id\":\"" + String(BIN_ID) + "\",";
+  json += "\"fillLevel\":" + String(fillLevel, 1) + ",";
+  json += "\"lidStatus\":\"" + getLidStatus() + "\",";
+  json += "\"lat\":" + String(lat, 6) + ",";
+  json += "\"lng\":" + String(lng, 6) + ",";
+  json += "\"wifiRssi\":" + String(WiFi.RSSI()) + ",";
+  json += "\"deviceUptimeMs\":" + String(millis());
+  json += "}";
+
+  int responseCode = http.POST(json);
+  Serial.print("[HTTP] POST /api/bin-data -> ");
+  Serial.println(responseCode);
+
+  if (responseCode > 0) {
+    String responseBody = http.getString();
+    Serial.print("[HTTP] Response: ");
+    Serial.println(responseBody);
+  } else {
+    Serial.print("[HTTP] Error: ");
+    Serial.println(http.errorToString(responseCode));
+  }
+
   http.end();
 }
 
-String getTimestamp() {
-  // Returns ISO 8601 timestamp (for production, use NTP to get actual time)
-  // For now, returns a simple format
-  time_t now = time(nullptr);
-  struct tm timeinfo = *localtime(&now);
-  char buffer[30];
-  strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
-  return String(buffer);
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  pinMode(IR_PIN, INPUT_PULLUP);
+
+  lidServo.attach(SERVO_PIN);
+  lidServo.write(SERVO_CLOSED_ANGLE);
+
+#if GPS_LIB_AVAILABLE
+  if (USE_GPS) {
+    GPSSerial.begin(9600, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+  }
+#endif
+
+  Serial.println("\n=== SmartBin Boot ===");
+  Serial.println("[Init] Starting WiFi connection...");
+  connectWiFiIfNeeded();
 }
 
 void loop() {
-  // Read sensor data
-  int dist = getDistance();
-  
-  if (dist >= 0) {
-    fillLevel = calculateFillLevel(dist);
-    
-    Serial.print("[Loop] Distance: ");
-    Serial.print(dist);
-    Serial.print("cm | Fill Level: ");
-    Serial.print(fillLevel);
-    Serial.println("%");
-    
-    // Automatic lid opening when object detected (< 20cm)
-    if (dist < 20) {
-      Serial.println("[Loop] Object detected - opening lid");
-      digitalWrite(BUZZER_PIN, HIGH);
-      delay(200);
-      digitalWrite(BUZZER_PIN, LOW);
-      
-      myServo.write(90);  // open lid
-      lidStatus = "open";
-      delay(3000);
-      
-      myServo.write(0);   // close lid
-      lidStatus = "closed";
-      Serial.println("[Loop] Lid closed");
-      delay(1000);
-    }
+  connectWiFiIfNeeded();
+  updateLidByIR();
+
+  unsigned long now = millis();
+  if (now - lastSendAt >= SEND_INTERVAL_MS) {
+    float fillLevel = readFillLevelPercent();
+    Serial.print("[Sensor] Fill level (%): ");
+    Serial.println(fillLevel, 1);
+    sendData(fillLevel);
+    lastSendAt = now;
   }
-  
-  // Send data to backend periodically
-  unsigned long currentTime = millis();
-  if (currentTime - lastSendTime >= SEND_INTERVAL) {
-    lastSendTime = currentTime;
-    Serial.println("\n[Loop] Sending data to backend...");
-    sendDataToBackend(dist, fillLevel);
-    Serial.println();
-  }
-  
-  delay(100);  // 100ms sensor reading interval
+
+  delay(50);
 }

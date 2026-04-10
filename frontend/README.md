@@ -96,8 +96,8 @@ The frontend is a **web-based dashboard** that provides real-time visualization 
   "lidStatus": "closed",
   "lastUpdated": "2026-04-03T10:30:00Z",
   "location": {
-    "lat": 28.4595,
-    "lng": 77.0266
+    "lat": 28.2715766,
+    "lng": 77.069847
   }
 }
 ```

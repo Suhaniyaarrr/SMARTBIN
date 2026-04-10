@@ -1,63 +1,124 @@
-    // In-memory array to store all bins
-// Structured exactly as required.
-let binsArray = [];
+const createDefaultBins = () => [
+    {
+        id: 'BIN-001',
+        location: { lat: 28.2715766, lng: 77.069847 },
+        fillLevel: 20,
+        status: 'Low',
+        lastUpdated: new Date().toISOString()
+    },
+    {
+        id: 'BIN-002',
+        location: { lat: 28.4601, lng: 77.0281 },
+        fillLevel: 55,
+        status: 'Medium',
+        lastUpdated: new Date().toISOString()
+    },
+    {
+        id: 'BIN-003',
+        location: { lat: 28.4622, lng: 77.0302 },
+        fillLevel: 85,
+        status: 'Full',
+        lastUpdated: new Date().toISOString()
+    }
+];
 
-/**
- * Adds a new bin or updates an existing one without creating duplicates.
- * Forces the explicitly requested data structure.
- */
-const updateBinData = (data) => {
-    console.log('\n[DataService] Processing new data for ID:', data.id);
+// Global in-memory bin store required for fast, database-free updates.
+let binsData = createDefaultBins();
 
-    // 1. Build the explicit structure requested by the frontend
-    const newBinData = {
-        id: data.id,
-        fillLevel: Number(data.fillLevel) || 0, // Ensure it's a number
-        lidStatus: data.lidStatus || 'unknown',
-        lastUpdated: data.timestamp || new Date().toISOString(),
-        location: {
-            // Handle if device sends it as flat (data.lat) or nested (data.location.lat)
-            lat: data.lat || (data.location && data.location.lat) || 0,
-            lng: data.lng || (data.location && data.location.lng) || 0
-        },
-        alertSent: data.alertSent || false // used by smsService
+const computeStatus = (fillLevel) => {
+    if (fillLevel >= 80) return 'Full';
+    if (fillLevel >= 50) return 'Medium';
+    return 'Low';
+};
+
+const normalizeFillLevel = (value) => {
+    const fillLevel = Number(value);
+    return Number.isFinite(fillLevel) ? Math.max(0, Math.min(100, fillLevel)) : null;
+};
+
+const toBinResponse = (bin) => ({
+    id: bin.id,
+    location: bin.location,
+    fillLevel: bin.fillLevel,
+    status: bin.status,
+    lastUpdated: bin.lastUpdated
+});
+
+const updateBin = (id, fillLevel, extra = {}) => {
+    const normalizedId = String(id || '').trim();
+    const normalizedFillLevel = normalizeFillLevel(fillLevel);
+
+    if (!normalizedId) {
+        return { error: 'Bin id is required.' };
+    }
+
+    if (normalizedFillLevel === null) {
+        return { error: 'fillLevel must be a valid number.' };
+    }
+
+    const binIndex = binsData.findIndex((bin) => bin.id === normalizedId);
+    if (binIndex === -1) {
+        return { error: `Bin not found: ${normalizedId}` };
+    }
+
+    const currentBin = binsData[binIndex];
+    const updatedBin = {
+        ...currentBin,
+        ...extra,
+        id: normalizedId,
+        fillLevel: normalizedFillLevel,
+        status: computeStatus(normalizedFillLevel),
+        lastUpdated: new Date().toISOString()
     };
 
-    // 2. Check if this bin already exists in our array
-    const existingIndex = binsArray.findIndex(bin => bin.id === newBinData.id);
+    binsData[binIndex] = updatedBin;
+    console.log(`[DataService] Updated bin ${normalizedId}:`, updatedBin);
 
-    if (existingIndex !== -1) {
-        // OVERWRITE existing data correctly to avoid duplicates
-        console.log(`[DataService] Updating EXISTING bin (Index: ${existingIndex}) -> ${newBinData.id}`);
-        // Keep the previous SMS alert lock state so we don't spam
-        newBinData.alertSent = binsArray[existingIndex].alertSent;
-        binsArray[existingIndex] = newBinData;
-    } else {
-        // ADD new bin
-        console.log(`[DataService] Adding NEW bin -> ${newBinData.id}`);
-        binsArray.push(newBinData);
+    return updatedBin;
+};
+
+const upsertBin = (data) => {
+    const normalizedId = String(data.id || '').trim();
+    const normalizedFillLevel = normalizeFillLevel(data.fillLevel);
+
+    if (!normalizedId || normalizedFillLevel === null) {
+        return { error: 'Bin id and fillLevel are required.' };
     }
-    
-    console.log('[DataService] Current Database State:', JSON.stringify(binsArray, null, 2));
-    
-    return newBinData;
+
+    const nextBin = {
+        id: normalizedId,
+        location: {
+            lat: Number(data.lat ?? (data.location && data.location.lat) ?? 0),
+            lng: Number(data.lng ?? (data.location && data.location.lng) ?? 0)
+        },
+        fillLevel: normalizedFillLevel,
+        status: computeStatus(normalizedFillLevel),
+        lastUpdated: new Date().toISOString()
+    };
+
+    const binIndex = binsData.findIndex((bin) => bin.id === normalizedId);
+    if (binIndex === -1) {
+        binsData.push(nextBin);
+    } else {
+        binsData[binIndex] = { ...binsData[binIndex], ...nextBin };
+    }
+
+    return nextBin;
 };
 
-const getAllBins = () => {
-    return binsArray;
-};
+const getAllBins = () => binsData.map(toBinResponse);
 
-const getAlertBins = () => {
-    return binsArray.filter(bin => bin.fillLevel >= 80);
-};
+const getAlertBins = () => binsData.filter((bin) => bin.fillLevel >= 80).map(toBinResponse);
 
-const getRawBin = (id) => {
-    return binsArray.find(bin => bin.id === id);
-};
+const getRawBin = (id) => binsData.find((bin) => bin.id === id);
 
 module.exports = {
-    updateBinData,
+    binsData,
+    updateBin,
+    upsertBin,
     getAllBins,
     getAlertBins,
-    getRawBin
+    getRawBin,
+    computeStatus,
+    normalizeFillLevel
 };

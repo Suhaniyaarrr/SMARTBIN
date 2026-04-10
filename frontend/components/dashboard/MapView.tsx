@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { type Bin, getStatusDotColor, getStatusColor, formatTimestamp } from "@/services/api";
-import { MapPin, X, Trash2, Clock, Navigation, ExternalLink } from "lucide-react";
+import { type Bin, getStatusColor, formatTimestamp } from "@/services/api";
+import { X, Trash2, Navigation, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface MapViewProps {
@@ -30,7 +30,7 @@ export function MapView({ bins, isLoading }: MapViewProps) {
 
   if (isLoading) {
     return (
-      <div className="flex h-[500px] items-center justify-center rounded-2xl border border-border bg-card">
+      <div className="flex h-125 items-center justify-center rounded-2xl border border-border bg-card">
         <div className="text-center">
           <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           <p className="text-sm text-muted-foreground">Loading map data...</p>
@@ -64,7 +64,7 @@ export function MapView({ bins, isLoading }: MapViewProps) {
       </div>
 
       {/* Map Container */}
-      <div className="relative h-[450px] bg-secondary/30">
+      <div className="relative h-112.5 bg-secondary/30">
         {/* Grid Pattern Background */}
         <div
           className="absolute inset-0 opacity-30"
@@ -132,7 +132,14 @@ export function MapView({ bins, isLoading }: MapViewProps) {
             <div className="p-4">
               <div className="mb-3 flex items-start justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={cn("rounded-lg p-2", `bg-${selectedBin.status === "low" ? "emerald" : selectedBin.status === "medium" ? "amber" : "red"}-500/20`)}>
+                  <div
+                    className={cn(
+                      "rounded-lg p-2",
+                      selectedBin.status === "low" && "bg-emerald-500/20",
+                      selectedBin.status === "medium" && "bg-amber-500/20",
+                      selectedBin.status === "high" && "bg-red-500/20"
+                    )}
+                  >
                     <Trash2 className={cn("h-5 w-5", getStatusColor(selectedBin.status))} />
                   </div>
                   <div>
