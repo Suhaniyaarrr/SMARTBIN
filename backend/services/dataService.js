@@ -1,3 +1,8 @@
+const fs = require('fs');
+const path = require('path');
+
+const DATA_FILE_PATH = path.join(__dirname, '..', 'data', 'bins.json');
+
 const createDefaultBins = () => [
     {
         id: 'BIN-001',
@@ -22,8 +27,37 @@ const createDefaultBins = () => [
     }
 ];
 
+const writeBinsFile = (bins) => {
+    fs.writeFileSync(DATA_FILE_PATH, JSON.stringify(bins, null, 2));
+};
+
+const readBinsFile = () => {
+    try {
+        if (!fs.existsSync(DATA_FILE_PATH)) {
+            const defaults = createDefaultBins();
+            writeBinsFile(defaults);
+            return defaults;
+        }
+
+        const fileContents = fs.readFileSync(DATA_FILE_PATH, 'utf8');
+        const parsed = JSON.parse(fileContents);
+        if (!Array.isArray(parsed) || parsed.length === 0) {
+            const defaults = createDefaultBins();
+            writeBinsFile(defaults);
+            return defaults;
+        }
+
+        return parsed;
+    } catch (error) {
+        console.error('[DataService] Failed to read bins file, falling back to defaults:', error.message);
+        const defaults = createDefaultBins();
+        writeBinsFile(defaults);
+        return defaults;
+    }
+};
+
 // Global in-memory bin store required for fast, database-free updates.
-let binsData = createDefaultBins();
+let binsData = readBinsFile();
 
 const computeStatus = (fillLevel) => {
     if (fillLevel >= 80) return 'Full';
@@ -72,6 +106,7 @@ const updateBin = (id, fillLevel, extra = {}) => {
     };
 
     binsData[binIndex] = updatedBin;
+    writeBinsFile(binsData);
     console.log(`[DataService] Updated bin ${normalizedId}:`, updatedBin);
 
     return updatedBin;
@@ -102,6 +137,8 @@ const upsertBin = (data) => {
     } else {
         binsData[binIndex] = { ...binsData[binIndex], ...nextBin };
     }
+
+    writeBinsFile(binsData);
 
     return nextBin;
 };

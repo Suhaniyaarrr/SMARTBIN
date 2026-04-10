@@ -1,6 +1,12 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 
+#if __has_include("secrets.h")
+#include "secrets.h"
+#else
+#error "Create hardware/code/smartbin/secrets.h from secrets.example.h before building."
+#endif
+
 #if __has_include(<ESP32Servo.h>)
 #include <ESP32Servo.h>
 #else
@@ -17,9 +23,9 @@
 // ----------------------
 // Network configuration
 // ----------------------
-const char* ssid = "YOUR_WIFI_SSID";
-const char* password = "YOUR_WIFI_PASSWORD";
-const char* serverName = "http://192.168.1.100:5000/api/bin-data";
+const char* ssid = WIFI_SSID;
+const char* password = WIFI_PASSWORD;
+const char* serverName = BACKEND_API_URL;
 
 // ----------------------
 // Bin/device identifiers

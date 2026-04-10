@@ -1,0 +1,32 @@
+[
+  {
+    "id": "BIN-001",
+    "location": {
+      "lat": 28.2715766,
+      "lng": 77.069847
+    },
+    "fillLevel": 20,
+    "status": "Low",
+    "lastUpdated": "2026-04-10T00:00:00.000Z"
+  },
+  {
+    "id": "BIN-002",
+    "location": {
+      "lat": 28.4601,
+      "lng": 77.0281
+    },
+    "fillLevel": 55,
+    "status": "Medium",
+    "lastUpdated": "2026-04-10T00:00:00.000Z"
+  },
+  {
+    "id": "BIN-003",
+    "location": {
+      "lat": 28.4622,
+      "lng": 77.0302
+    },
+    "fillLevel": 85,
+    "status": "Full",
+    "lastUpdated": "2026-04-10T00:00:00.000Z"
+  }
+]
