@@ -115,7 +115,7 @@ export function Charts({ bins, isLoading }: ChartsProps) {
         {[1, 2].map((i) => (
           <div
             key={i}
-            className="h-[400px] animate-pulse rounded-2xl border border-border bg-card"
+            className="h-100 animate-pulse rounded-2xl border border-border bg-card"
           />
         ))}
       </div>
@@ -146,7 +146,7 @@ export function Charts({ bins, isLoading }: ChartsProps) {
         </div>
 
         <div className="p-5">
-          <ChartContainer config={lineChartConfig} className="h-[300px] w-full">
+          <ChartContainer config={lineChartConfig} className="h-75 w-full">
             <LineChart data={lineChartData}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.5} />
 
@@ -185,7 +185,7 @@ export function Charts({ bins, isLoading }: ChartsProps) {
         </div>
 
         <div className="p-5">
-          <ChartContainer config={barChartConfig} className="h-[300px] w-full">
+          <ChartContainer config={barChartConfig} className="h-75 w-full">
             <BarChart data={barChartData}>
               <CartesianGrid strokeDasharray="3 3" />
 

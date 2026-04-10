@@ -66,7 +66,9 @@ const mapLocalhostToCurrentHost = (url: string): string => {
 };
 
 const resolveApiBaseUrl = (): string => {
-  const envUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  const envUrl =
+    process.env.NEXT_PUBLIC_API_URL?.trim() ||
+    process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
   if (envUrl) {
     return mapLocalhostToCurrentHost(envUrl.replace(/\/$/, ""));
   }
@@ -103,6 +105,7 @@ export const api = {
    * 🔥 Fetch all bins (CONNECTED TO BACKEND)
    */
   async getBins(): Promise<Bin[]> {
+    console.log("[SmartBin API] GET /api/bins ->", `${BASE_URL}/api/bins`);
     const res = await fetch(`${BASE_URL}/api/bins`, {
       method: "GET",
       headers: {
@@ -115,9 +118,12 @@ export const api = {
       throw new Error(`Failed to fetch bins: ${res.status}`);
     }
 
-    const data = await parseJson<BackendBinResponse[]>(res);
+    const data = await parseJson<{ bins?: BackendBinResponse[] } | BackendBinResponse[]>(res);
+    console.log("[SmartBin API] /api/bins raw response:", data);
 
-    return data.map((bin) => ({
+    const bins = Array.isArray(data) ? data : data.bins || [];
+
+    return bins.map((bin) => ({
       id: bin.id,
       fillLevel: bin.fillLevel,
       status: normalizeStatus(bin.status),
@@ -139,6 +145,7 @@ export const api = {
    * 🔥 Fetch alerts (CONNECTED TO BACKEND)
    */
   async getAlerts(): Promise<Alert[]> {
+    console.log("[SmartBin API] GET /api/alerts ->", `${BASE_URL}/api/alerts`);
     const res = await fetch(`${BASE_URL}/api/alerts`, {
       method: "GET",
       headers: {
@@ -151,9 +158,12 @@ export const api = {
       throw new Error(`Failed to fetch alerts: ${res.status}`);
     }
 
-    const data = await parseJson<BackendBinResponse[]>(res);
+    const data = await parseJson<{ bins?: BackendBinResponse[] } | BackendBinResponse[]>(res);
+    console.log("[SmartBin API] /api/alerts raw response:", data);
 
-    return data.map((bin, index: number) => ({
+    const alerts = Array.isArray(data) ? data : data.bins || [];
+
+    return alerts.map((bin, index: number) => ({
       id: `ALERT_${index}`,
       binId: bin.id,
       message: `${bin.id} is ${bin.fillLevel}% full`,
@@ -200,6 +210,7 @@ export const api = {
     lastSync: string;
   }> {
     try {
+      console.log("[SmartBin API] GET /api/status ->", `${BASE_URL}/api/status`);
       const res = await fetch(`${BASE_URL}/api/status`, {
         method: "GET",
         cache: "no-store",
@@ -213,6 +224,7 @@ export const api = {
       }
 
       const status = await parseJson<BackendStatusResponse>(res);
+      console.log("[SmartBin API] /api/status raw response:", status);
       return {
         connected: status.status === "ok",
         lastSync: status.timestamp,

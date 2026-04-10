@@ -13,8 +13,8 @@ const PORT = process.env.PORT || 5000;
 */
 app.use(
   cors({
-    origin: "*", // 🔥 Allow all origins (fixes Vercel + ESP32 issues)
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    origin: '*',
+    methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );

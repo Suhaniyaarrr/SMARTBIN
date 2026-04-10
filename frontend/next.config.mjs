@@ -1,7 +1,9 @@
 import { dirname } from 'node:path'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+const workspaceRoot = join(__dirname, '..')
 
 const toOriginList = (value) =>
   String(value || '')
@@ -25,10 +27,10 @@ const nextConfig = {
     unoptimized: true,
   },
   turbopack: {
-    root: __dirname,
+    root: workspaceRoot,
   },
   async rewrites() {
-    const backendOrigin = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000'
+    const backendOrigin = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000'
 
     return [
       {

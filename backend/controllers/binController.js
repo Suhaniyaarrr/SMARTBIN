@@ -107,33 +107,51 @@ const updateBin = async (req, res) => {
  * Return all bins to the dashboard
  */
 const getAllBins = (req, res) => {
-    console.log('\n[Controller] Fetching all bins for GET /api/bins...');
-    const bins = dataService.getAllBins();
-    console.log(`[Controller] Returning ${bins.length} bins to client.`);
-    res.status(200).json(bins);
+    try {
+        console.log('\n[Controller] Fetching all bins for GET /api/bins...');
+        const bins = dataService.getAllBins() || [];
+        console.log(`[Controller] Returning ${bins.length} bins to client.`);
+        res.status(200).json({ bins });
+    } catch (error) {
+        console.error('[Controller Error] Failed to fetch bins:', error);
+        res.status(500).json({ error: 'Failed to fetch bins', bins: [] });
+    }
 };
 
 /**
  * Return only bins that need alerting
  */
 const getAlerts = (req, res) => {
-    const alertBins = dataService.getAlertBins();
-    res.status(200).json(alertBins);
+    try {
+        const alertBins = dataService.getAlertBins() || [];
+        res.status(200).json({ bins: alertBins });
+    } catch (error) {
+        console.error('[Controller Error] Failed to fetch alerts:', error);
+        res.status(500).json({ error: 'Failed to fetch alerts', bins: [] });
+    }
 };
 
 const getStatus = (req, res) => {
-    const bins = dataService.getAllBins();
-    const alertBins = dataService.getAlertBins();
+    try {
+        const bins = dataService.getAllBins() || [];
+        const alertBins = dataService.getAlertBins() || [];
 
-    res.status(200).json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        totalBins: bins.length,
-        criticalBins: alertBins.length,
-        latestUpdate: bins.length ? bins.reduce((latest, current) => {
-            return new Date(current.lastUpdated) > new Date(latest.lastUpdated) ? current : latest;
-        }).lastUpdated : null
-    });
+        res.status(200).json({
+            status: 'ok',
+            timestamp: new Date().toISOString(),
+            totalBins: bins.length,
+            criticalBins: alertBins.length,
+            latestUpdate: bins.length ? bins.reduce((latest, current) => {
+                return new Date(current.lastUpdated) > new Date(latest.lastUpdated) ? current : latest;
+            }).lastUpdated : null
+        });
+    } catch (error) {
+        console.error('[Controller Error] Failed to build status:', error);
+        res.status(500).json({
+            status: 'error',
+            error: 'Failed to build status'
+        });
+    }
 };
 
 module.exports = {
